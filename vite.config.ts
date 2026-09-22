@@ -15,4 +15,23 @@ export default defineConfig({
   nitro: {
     preset: process.env["NITRO_PRESET"] || "vercel",
   },
+  vite: {
+    define: {
+      "import.meta.env.VITE_SUPABASE_URL": JSON.stringify(
+        process.env["VITE_SUPABASE_URL"] ||
+          process.env["SUPABASE_URL"] ||
+          "https://hhkervkgtntkcgzvxaqc.supabase.co",
+      ),
+      "import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY": JSON.stringify(
+        process.env["VITE_SUPABASE_PUBLISHABLE_KEY"] ||
+          process.env["SUPABASE_PUBLISHABLE_KEY"] ||
+          "sb_publishable_4Yagqn9G33ic8ppU1Kzatw_2-sYJCsP",
+      ),
+      "import.meta.env.VITE_SUPABASE_PROJECT_ID": JSON.stringify(
+        process.env["VITE_SUPABASE_PROJECT_ID"] ||
+          process.env["SUPABASE_PROJECT_ID"] ||
+          "hhkervkgtntkcgzvxaqc",
+      ),
+    },
+  },
 });
