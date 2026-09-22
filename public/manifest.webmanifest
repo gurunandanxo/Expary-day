@@ -1,0 +1,11 @@
+{
+  "name": "ExpiryEye",
+  "short_name": "ExpiryEye",
+  "description": "Scan products, understand ingredients, and track expiry dates.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#eef3fb",
+  "theme_color": "#1458e0",
+  "icons": [{ "src": "/favicon.ico", "sizes": "48x48", "type": "image/x-icon" }]
+}
