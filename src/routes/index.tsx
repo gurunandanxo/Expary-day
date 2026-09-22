@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ArrowLeft,
   Bell,
   Box,
   Check,
@@ -117,6 +118,57 @@ function ExpiryEye() {
     avoidedIngredients: ["Fragrance"],
   });
 
+  const productsListRef = useRef<StoredProduct[]>([]);
+  useEffect(() => {
+    productsListRef.current = productsList;
+  }, [productsList]);
+
+  // Keep mobile and browser back navigation in sync with app view states
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    // Initialize root history state if absent
+    if (!window.history.state || typeof window.history.state.view !== "string") {
+      window.history.replaceState({ view: "home", scanStep: "camera" }, "");
+    }
+
+    const handlePopState = (event: PopStateEvent) => {
+      const state = event.state as {
+        view?: View;
+        scanStep?: "camera" | "confirm" | "detail";
+        productId?: string;
+      } | null;
+
+      if (state && state.view) {
+        setView(state.view);
+        setScanStep(state.scanStep || "camera");
+        if (state.productId) {
+          const found = productsListRef.current.find((p) => p.id === state.productId);
+          if (found) {
+            setSelectedProduct(found);
+          } else {
+            loadProducts().then((items) => {
+              const item = items.find((p) => p.id === state.productId);
+              if (item) setSelectedProduct(item);
+            });
+          }
+        } else if (state.view !== "product_detail") {
+          setSelectedProduct(null);
+        }
+      } else {
+        setView("home");
+        setScanStep("camera");
+        setSelectedProduct(null);
+      }
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, []);
+
   // Load user session
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -149,16 +201,52 @@ function ExpiryEye() {
     refreshProducts();
   }, [currentUser]);
 
-  const changeView = (next: View) => {
+  const changeView = (next: View, pushHistory = true) => {
+    if (view === next && next !== "scan") return;
+
+    if (pushHistory && typeof window !== "undefined") {
+      window.history.pushState({ view: next, scanStep: "camera" }, "");
+    }
+
     setView(next);
     if (next === "scan") {
       setScanStep("camera");
     }
+    if (next !== "product_detail") {
+      setSelectedProduct(null);
+    }
     window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  // Open product details from any view
+  const openProductDetail = (p: StoredProduct, pushHistory = true) => {
+    if (pushHistory && typeof window !== "undefined") {
+      window.history.pushState({ view: "product_detail", productId: p.id }, "");
+    }
+    setSelectedProduct(p);
+    setView("product_detail");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  // Mobile / UI back navigation handler
+  const handleBack = () => {
+    if (
+      typeof window !== "undefined" &&
+      window.history.state &&
+      window.history.state.view &&
+      window.history.state.view !== "home"
+    ) {
+      window.history.back();
+    } else {
+      changeView("home");
+    }
   };
 
   // Handle successful scan from CameraScanner
   const handleScanComplete = (result: ScanSuccessResult) => {
+    if (typeof window !== "undefined") {
+      window.history.pushState({ view: "scan", scanStep: "confirm" }, "");
+    }
     setActiveScanResult(result);
     setScanStep("confirm");
   };
@@ -169,6 +257,12 @@ function ExpiryEye() {
       const saved = await saveProduct(productToSave);
       await refreshProducts();
       setSelectedProduct(saved);
+      if (typeof window !== "undefined") {
+        window.history.pushState(
+          { view: "scan", scanStep: "detail", productId: saved.id },
+          "",
+        );
+      }
       setScanStep("detail");
     } catch (err) {
       console.error("[ExpiryEye] Error saving product:", err);
@@ -183,13 +277,6 @@ function ExpiryEye() {
       setSelectedProduct(null);
       changeView("products");
     }
-  };
-
-  // Open product details from any view
-  const openProductDetail = (p: StoredProduct) => {
-    setSelectedProduct(p);
-    setView("product_detail");
-    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   // Calculate alerts badge
@@ -244,6 +331,8 @@ function ExpiryEye() {
           setQuery={setQuery}
           onProfile={() => setAuthOpen(true)}
           currentUser={currentUser}
+          onBack={handleBack}
+          showBack={view !== "home"}
         />
         <div className="mx-auto max-w-[1180px] px-4 py-6 sm:px-6 lg:px-8">
           {/* Dashboard View */}
@@ -274,6 +363,9 @@ function ExpiryEye() {
                 <CameraScanner
                   onScanComplete={handleScanComplete}
                   onEnterManually={() => {
+                    if (typeof window !== "undefined") {
+                      window.history.pushState({ view: "scan", scanStep: "confirm" }, "");
+                    }
                     setActiveScanResult({
                       data: {
                         productName: "",
@@ -295,7 +387,8 @@ function ExpiryEye() {
                 <ScanConfirmation
                   scanResult={activeScanResult}
                   onConfirm={handleConfirmProduct}
-                  onScanAgain={() => setScanStep("camera")}
+                  onScanAgain={handleBack}
+                  onBack={handleBack}
                 />
               )}
 
@@ -303,8 +396,14 @@ function ExpiryEye() {
                 <ProductDetails
                   product={selectedProduct}
                   userPreferences={userPreferences}
-                  onScanAnother={() => setScanStep("camera")}
+                  onScanAnother={() => {
+                    if (typeof window !== "undefined") {
+                      window.history.pushState({ view: "scan", scanStep: "camera" }, "");
+                    }
+                    setScanStep("camera");
+                  }}
                   onViewInventory={() => changeView("products")}
+                  onBack={handleBack}
                 />
               )}
             </div>
@@ -317,6 +416,7 @@ function ExpiryEye() {
               userPreferences={userPreferences}
               onScanAnother={() => changeView("scan")}
               onViewInventory={() => changeView("products")}
+              onBack={handleBack}
             />
           )}
 
@@ -409,15 +509,30 @@ function Header({
   setQuery,
   onProfile,
   currentUser,
+  onBack,
+  showBack,
 }: {
   query: string;
   setQuery: (v: string) => void;
   onProfile: () => void;
   currentUser: User | null;
+  onBack?: () => void;
+  showBack?: boolean;
 }) {
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-panel/65 px-4 backdrop-blur-2xl sm:px-6 lg:px-8">
-      <div className="lg:hidden">
+      <div className="flex items-center gap-2 lg:hidden">
+        {showBack && onBack && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onBack}
+            className="h-8 -ml-2 gap-1 px-2 text-xs"
+            aria-label="Go back"
+          >
+            <ArrowLeft className="size-4" /> Back
+          </Button>
+        )}
         <Brand />
       </div>
       <div className="hidden items-center gap-2 text-xs text-muted-foreground lg:flex">

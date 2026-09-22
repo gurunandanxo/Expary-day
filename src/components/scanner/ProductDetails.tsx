@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StoredProduct, calculateExpiryStatus } from "@/lib/product-storage";
-import { getIngredientInfo } from "@/lib/ingredient-database";
+import { filterImportantIngredients, getIngredientInfo } from "@/lib/ingredient-database";
 import { UserPreferencesConfig } from "@/lib/parser";
 
 interface ProductDetailsProps {
@@ -25,6 +25,7 @@ interface ProductDetailsProps {
   userPreferences?: UserPreferencesConfig;
   onScanAnother: () => void;
   onViewInventory: () => void;
+  onBack?: () => void;
 }
 
 export function ProductDetails({
@@ -32,8 +33,19 @@ export function ProductDetails({
   userPreferences = {},
   onScanAnother,
   onViewInventory,
+  onBack,
 }: ProductDetailsProps) {
   const [openIngredient, setOpenIngredient] = useState<string | null>(null);
+  const [showAllIngredients, setShowAllIngredients] = useState(false);
+
+  const { important, other } = useMemo(() => {
+    return filterImportantIngredients(product.ingredients || []);
+  }, [product.ingredients]);
+
+  const displayedIngredients =
+    showAllIngredients || important.length === 0
+      ? product.ingredients || []
+      : important;
 
   const expiry = calculateExpiryStatus(product.expiry_date);
 
@@ -67,16 +79,29 @@ export function ProductDetails({
     <div className="mx-auto max-w-4xl animate-rise">
       {/* Top Header Bar */}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <span className="font-mono text-[10px] uppercase tracking-wider text-primary">
-            Product Intelligence
-          </span>
-          <h1 className="mt-1 font-display text-2xl font-bold sm:text-3xl">{product.name}</h1>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            {product.brand ? `${product.brand} · ` : ""}
-            {product.category}
-            {product.quantity ? ` · ${product.quantity}` : ""}
-          </p>
+        <div className="flex items-center gap-3">
+          {onBack && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onBack}
+              className="h-9 gap-1.5 px-3 text-xs"
+              aria-label="Go back to previous page"
+            >
+              <ArrowLeft className="size-4" /> Back
+            </Button>
+          )}
+          <div>
+            <span className="font-mono text-[10px] uppercase tracking-wider text-primary">
+              Product Intelligence
+            </span>
+            <h1 className="mt-0.5 font-display text-2xl font-bold sm:text-3xl">{product.name}</h1>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {product.brand ? `${product.brand} · ` : ""}
+              {product.category}
+              {product.quantity ? ` · ${product.quantity}` : ""}
+            </p>
+          </div>
         </div>
 
         <div className="flex items-center gap-2">
@@ -194,18 +219,37 @@ export function ProductDetails({
 
         {/* Right Column: Factual Ingredient Breakdown */}
         <div className="glass-panel p-5">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-display text-base font-semibold">
-              Ingredients ({product.ingredients?.length || 0})
-            </h2>
-            <span className="font-mono text-[10px] uppercase text-muted-foreground">
-              Tap to inspect
-            </span>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="font-display text-base font-semibold">
+                {showAllIngredients ? "All Ingredients" : "Key & Important Ingredients"}
+              </h2>
+              <p className="text-[11px] text-muted-foreground">
+                {showAllIngredients
+                  ? `Showing all ${product.ingredients?.length || 0} ingredients`
+                  : `Showing ${important.length} key active & functional ingredients`}
+              </p>
+            </div>
+
+            {other.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => setShowAllIngredients(!showAllIngredients)}
+              >
+                {showAllIngredients ? (
+                  <>Show Key Only ({important.length})</>
+                ) : (
+                  <>Show All ({product.ingredients?.length || 0})</>
+                )}
+              </Button>
+            )}
           </div>
 
-          {product.ingredients && product.ingredients.length > 0 ? (
+          {displayedIngredients.length > 0 ? (
             <div className="space-y-2">
-              {product.ingredients.map((ing) => {
+              {displayedIngredients.map((ing) => {
                 const info = getIngredientInfo(ing);
                 const isOpen = openIngredient === ing;
 
@@ -259,6 +303,22 @@ export function ProductDetails({
                   </div>
                 );
               })}
+
+              {!showAllIngredients && other.length > 0 && (
+                <div className="mt-3 rounded-lg border border-dashed border-border bg-secondary/20 p-3.5 text-center text-xs text-muted-foreground">
+                  <p>
+                    + {other.length} standard formulation aids (water, thickeners, stabilizers, pH adjusters) omitted for clarity.
+                  </p>
+                  <Button
+                    variant="link"
+                    size="sm"
+                    className="mt-1 h-auto p-0 font-medium text-xs text-primary"
+                    onClick={() => setShowAllIngredients(true)}
+                  >
+                    View all {product.ingredients?.length || 0} ingredients
+                  </Button>
+                </div>
+              )}
             </div>
           ) : (
             <div className="rounded-lg border border-dashed border-border p-6 text-center text-xs text-muted-foreground">

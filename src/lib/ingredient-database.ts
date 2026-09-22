@@ -415,3 +415,154 @@ export function getIngredientInfo(rawName: string): IngredientInfo | undefined {
 
   return undefined;
 }
+
+/**
+ * Determines whether an ingredient is a key functional active, primary hydrator/lipid,
+ * or significant allergen/fragrance note, as opposed to a minor formulating excipient
+ * (such as thickeners, chelators, pH adjusters, or colorants).
+ */
+export function isImportantIngredient(rawName: string, info?: IngredientInfo): boolean {
+  const norm = normalizeIngredientName(rawName);
+
+  // 1. If database entry exists
+  if (info) {
+    if (info.isFragrance || info.isPotentialAllergen) return true;
+    const cat = info.category.toLowerCase();
+    if (
+      cat.includes("active") ||
+      cat.includes("protectant") ||
+      cat.includes("antioxidant") ||
+      cat.includes("nourishing") ||
+      cat.includes("barrier") ||
+      cat.includes("lipid") ||
+      cat.includes("humectant") ||
+      cat.includes("retinoid") ||
+      cat.includes("exfoliant") ||
+      cat.includes("soothing") ||
+      cat.includes("sunscreen")
+    ) {
+      return true;
+    }
+  }
+
+  // 2. High-importance active & benefit keywords (cosmetics, personal care, food)
+  const KEY_KEYWORDS = [
+    "niacinamide",
+    "hyaluron",
+    "retinol",
+    "retin",
+    "vitamin",
+    "ascorb",
+    "tocopher",
+    "salicylic",
+    "glycolic",
+    "lactic",
+    "ceramide",
+    "peptide",
+    "panthenol",
+    "squalane",
+    "shea",
+    "jojoba",
+    "argan",
+    "aloe",
+    "centella",
+    "cica",
+    "caffeine",
+    "zinc",
+    "sulfate",
+    "paraben",
+    "fragrance",
+    "parfum",
+    "tea tree",
+    "collagen",
+    "bakuchiol",
+    "azelaic",
+    "benzoyl",
+    "coq10",
+    "ubiquinone",
+    "glycerin",
+    "avobenzone",
+    "zinc oxide",
+    "titanium dioxide",
+    "green tea",
+    "licorice",
+    "protein",
+    "probiotic",
+    "ferment",
+    "butter",
+    "essential oil",
+    "honey",
+    "oat",
+    "curcumin",
+    "bha",
+    "aha",
+  ];
+
+  for (const kw of KEY_KEYWORDS) {
+    if (norm.includes(normalizeIngredientName(kw))) {
+      return true;
+    }
+  }
+
+  // 3. Known minor formulating excipients, thickeners, chelating agents, pH adjusters, dyes
+  const MINOR_EXCIPIENTS = [
+    "edta",
+    "carbomer",
+    "hydroxide",
+    "crosspolymer",
+    "polysorbate",
+    "polyacrylate",
+    "ci",
+    "fdc",
+    "dc",
+    "yellow",
+    "red",
+    "blue",
+    "peg",
+    "ceteareth",
+    "steareth",
+    "sorbate",
+    "benzoate",
+    "phenoxyethanol",
+  ];
+
+  for (const exc of MINOR_EXCIPIENTS) {
+    if (norm.includes(exc)) {
+      return false;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Splits an ingredient list into Important/Key ingredients and Standard/Formulation ingredients.
+ */
+export function filterImportantIngredients(ingredients: string[]): {
+  important: string[];
+  other: string[];
+} {
+  const important: string[] = [];
+  const other: string[] = [];
+
+  for (const ing of ingredients) {
+    const info = getIngredientInfo(ing);
+    if (isImportantIngredient(ing, info)) {
+      important.push(ing);
+    } else {
+      other.push(ing);
+    }
+  }
+
+  // Fallback: If no ingredients matched the key keywords (e.g. food with simple names),
+  // treat the first 5 ingredients (the primary components by weight) as key.
+  if (important.length === 0 && ingredients.length > 0) {
+    return {
+      important: ingredients.slice(0, 5),
+      other: ingredients.slice(5),
+    };
+  }
+
+  return { important, other };
+}
+

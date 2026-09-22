@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import {
+  ArrowLeft,
   Calendar,
   Check,
   ChevronDown,
@@ -15,14 +16,21 @@ import {
 import { Button } from "@/components/ui/button";
 import { ScanSuccessResult } from "./CameraScanner";
 import { StoredProduct } from "@/lib/product-storage";
+import { isImportantIngredient } from "@/lib/ingredient-database";
 
 interface ScanConfirmationProps {
   scanResult: ScanSuccessResult;
   onConfirm: (confirmedProduct: Omit<StoredProduct, "id" | "created_at">) => void;
   onScanAgain: () => void;
+  onBack?: () => void;
 }
 
-export function ScanConfirmation({ scanResult, onConfirm, onScanAgain }: ScanConfirmationProps) {
+export function ScanConfirmation({
+  scanResult,
+  onConfirm,
+  onScanAgain,
+  onBack,
+}: ScanConfirmationProps) {
   const { data, barcode, imagePreviewUrl, source } = scanResult;
 
   // Editable form state
@@ -36,6 +44,7 @@ export function ScanConfirmation({ scanResult, onConfirm, onScanAgain }: ScanCon
   const [ingredients, setIngredients] = useState<string[]>(data.ingredients || []);
   const [newIngredient, setNewIngredient] = useState("");
   const [showIngredients, setShowIngredients] = useState(false);
+  const [onlyKeyIngredients, setOnlyKeyIngredients] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
 
   const handleAddIngredient = () => {
@@ -71,9 +80,20 @@ export function ScanConfirmation({ scanResult, onConfirm, onScanAgain }: ScanCon
         {/* Header */}
         <div className="mb-6 border-b border-border pb-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="font-mono text-[10px] uppercase tracking-wider text-primary">
-              Product Found
-            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => (onBack ? onBack() : onScanAgain())}
+                className="h-7 -ml-1 gap-1 px-2 text-xs"
+                aria-label="Go back"
+              >
+                <ArrowLeft className="size-3.5" /> Back
+              </Button>
+              <span className="font-mono text-[10px] uppercase tracking-wider text-primary">
+                Product Found
+              </span>
+            </div>
             <span className="rounded-full bg-safe-soft px-2.5 py-0.5 font-mono text-[11px] font-medium text-safe">
               {source === "barcode" ? "Barcode Verified" : "OCR Extracted"} · {data.confidence}%
               confidence
@@ -232,7 +252,13 @@ export function ScanConfirmation({ scanResult, onConfirm, onScanAgain }: ScanCon
             className="flex w-full items-center justify-between text-left text-sm font-medium"
             onClick={() => setShowIngredients(!showIngredients)}
           >
-            <span>Ingredients Detected ({ingredients.length})</span>
+            <span>
+              Ingredients Detected ({ingredients.length}
+              {ingredients.length > 0
+                ? ` · ${ingredients.filter((i) => isImportantIngredient(i)).length} key`
+                : ""}
+              )
+            </span>
             {showIngredients ? (
               <ChevronUp className="size-4" />
             ) : (
@@ -242,22 +268,52 @@ export function ScanConfirmation({ scanResult, onConfirm, onScanAgain }: ScanCon
 
           {showIngredients && (
             <div className="mt-3 space-y-3">
-              <div className="flex flex-wrap gap-1.5">
-                {ingredients.map((ing, idx) => (
-                  <span
-                    key={idx}
-                    className="inline-flex items-center gap-1 rounded-md bg-secondary px-2.5 py-1 text-xs"
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] text-muted-foreground">
+                  {onlyKeyIngredients
+                    ? `Showing ${ingredients.filter((i) => isImportantIngredient(i)).length} key ingredients`
+                    : `Showing all ${ingredients.length} ingredients (★ = key active)`}
+                </span>
+                {ingredients.some((i) => isImportantIngredient(i)) && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-[11px] text-primary hover:text-primary"
+                    onClick={() => setOnlyKeyIngredients(!onlyKeyIngredients)}
                   >
-                    {ing}
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveIngredient(idx)}
-                      className="text-muted-foreground hover:text-foreground"
-                    >
-                      <X className="size-3" />
-                    </button>
-                  </span>
-                ))}
+                    {onlyKeyIngredients ? "Show all" : "Show key only"}
+                  </Button>
+                )}
+              </div>
+
+              <div className="flex flex-wrap gap-1.5">
+                {ingredients
+                  .map((ing, idx) => ({ ing, idx, isKey: isImportantIngredient(ing) }))
+                  .filter(({ isKey }) => !onlyKeyIngredients || isKey)
+                  .map(({ ing, idx, isKey }) => {
+                    return (
+                      <span
+                        key={idx}
+                        className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs ${
+                          isKey
+                            ? "border border-primary/30 bg-primary/10 font-medium text-foreground"
+                            : "bg-secondary text-muted-foreground"
+                        }`}
+                      >
+                        {isKey && <span className="text-[10px] text-primary">★</span>}
+                        {ing}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveIngredient(idx)}
+                          className="text-muted-foreground hover:text-foreground"
+                          aria-label={`Remove ${ing}`}
+                        >
+                          <X className="size-3" />
+                        </button>
+                      </span>
+                    );
+                  })}
               </div>
 
               <div className="flex gap-2 pt-2">
